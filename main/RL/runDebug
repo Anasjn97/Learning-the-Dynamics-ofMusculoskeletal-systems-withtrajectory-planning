@@ -1,0 +1,61 @@
+#!/bin/bash
+DIR="$( cd "$(dirname "$0")" ; pwd -P )"
+DELIVRABLE=${1:-delivrable1}
+GPU="device=${2:all}"
+
+CTO_NAME=berat/${DELIVRABLE}_$UID
+CTO_TAG="latest"
+NVIDIA=0
+
+runtime=""
+if ! which lspci; then
+   if ! which nvidia-smi; then
+       echo "Nor lspci nor nvidia-smi available on the machine."
+       exit 1;
+   else
+       ncards=`nvidia-smi --list-gpus | wc -l`
+   fi
+else
+   ncards=`lspci | grep -i 'NVIDIA' | wc -l`
+fi
+
+DEVICE="" # Default is GPU
+if [ "$ncards" -gt 0 ]; then
+   NVIDIA=1
+   runtime="--runtime=nvidia --gpus $GPU"
+else
+   DEVICE="--device=cpu"
+   echo "No nvidia found switching to standard runtime"
+fi
+
+# No cpu option for delivrable7
+if [ $DELIVRABLE == "delivrable7" ]; then
+   DEVICE=""
+fi
+
+
+XSOCK=/tmp/.X11-unix
+XAUTH=/tmp/.docker.xauth
+
+ALP_DEV_ID=docker
+
+WHAT_TO_RUN=${@:5}
+
+if ! docker run \
+    -it \
+    --rm \
+    $runtime \
+    --ipc=host \
+    --shm-size=30G \
+    --user=$UID:$UID \
+    -e DISPLAY=$DISPLAY \
+    -e PYTHONPATH=/home/user \
+    -v $DIR:/home/user/hft \
+    -v $HOME/.ssh:/home/user/.ssh \
+    -v $DIR/cache/c1:/home/user/.cache \
+    -v $DIR/cache/c2:/home/user/.torch \
+    -p 6008:6006 \
+    ${CTO_NAME}:${CTO_TAG} \
+    /bin/bash $WHAT_TO_RUN $DEVICE; then
+  exit 1;
+fi
